@@ -1,0 +1,31 @@
+# 若构建过程中拉取依赖失败，请自定义git ssh配置 或者 维护专门的镜像
+FROM hub-mirror.wps.cn/priopen/golang-amd64-arm64-builder:1.18.7-ubuntu as build
+SHELL ["/bin/bash", "-c"]
+ENV GONOPROXY="kgit.wpsit.cn"
+ENV GO111MODULE=on
+ENV GOPROXY="https://goproxy.cn,https://proxy.golang.com.cn,direct"
+ENV GOSUMDB=off
+ENV CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc
+# RUN echo machine ksogit.kingsoft.net >> ~/.netrc
+# RUN echo login xxxx >> ~/.netrc
+# RUN echo password xxxx >> ~/.netrc
+# RUN echo machine kgit.wpsit.cn >> ~/.netrc
+# RUN echo login xxxx >> ~/.netrc
+# RUN echo password xxxx >> ~/.netrc
+WORKDIR /opt/sdk
+COPY . /opt/sdk
+ARG NETRC=netrc
+RUN if [ -f ${NETRC} ]; \
+then cp netrc /root/.netrc; \
+else echo "warning: 未配置netrc"; \
+fi
+RUN source /etc/profile && go build -v -o server ./app
+
+FROM hub-mirror.wps.cn/priopen/golang-arm64-runner:1.17.13-ubuntu-v1 
+COPY --from=build /opt/sdk/tini-arm64 /sbin/tini
+COPY --from=build /opt/sdk/server /usr/local/bin/
+COPY --from=build /opt/sdk/kae_start.sh /usr/local/bin/kae_start.sh
+WORKDIR /opt
+RUN chmod +x /sbin/tini
+RUN chmod +x /usr/local/bin/kae_start.sh
+CMD ["kae_start.sh"]
